@@ -8,8 +8,32 @@ This test exercises:
 
 ## Install
 
+Create and activate a project-local virtual environment:
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Upgrade `pip` and install the project dependencies:
+
+```bash
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+```
+
+Verify the installation:
+
+```bash
+python -c "import locust, pymongo, dotenv; print('Dependencies installed')"
+locust --version
+```
+
+To leave the virtual environment:
+
+```bash
+deactivate
+```
 ```
 
 ## Configure
