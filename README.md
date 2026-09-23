@@ -57,6 +57,7 @@ Useful overrides:
 | `TS_INDEX_NAME` | `metadata_device_timestamp` | Compound index name |
 | `TS_READ_WINDOW_SECONDS` | `3600` | Time window for indexed reads |
 | `TS_READ_LIMIT` | `100` | Maximum documents returned per read |
+| `TS_INSERT_BATCH_SIZE` | `100` | Time-series records inserted per call, capped at 100 |
 | `DEVICE_COUNT` | `1000` | Number of logical devices |
 | `PAYLOAD_BYTES` | `256` | CRUD payload size |
 | `MAX_LOCAL_CRUD_IDS` | `1000` | Per-user IDs retained for update/delete |
@@ -137,6 +138,17 @@ Time-series inserts create measurements like this. The actual field names use `T
 }
 ```
 
+Each `timeseries_insert` task inserts up to **100 records per MongoDB call** using `insert_many` with unordered writes. The default batch size is 100 and `TS_INSERT_BATCH_SIZE` is capped at 100; values below 1 are normalized to a batch size of 1. Therefore, one successful `timeseries_insert` Locust request represents one batch of measurement documents written to the time-series collection, not one individual record.
+
+The write pattern is equivalent to:
+
+```python
+documents = [create_measurement() for _ in range(TS_INSERT_BATCH_SIZE)]
+result = time_series_collection.insert_many(documents, ordered=False)
+```
+
+The Locust response length records `len(result.inserted_ids)`, while the response time covers generation of the batch, the MongoDB `insert_many` call, and completion of that call. With the default configuration, one successful request attempts to write 100 time-series records.
+
 ### User scheduling and parallelism
 
 - Each Locust user maintains its own task state and selects one task after each wait period; MongoDB client and collection objects are shared within the Locust process.
@@ -161,6 +173,20 @@ For the native time-series collection, the test creates this index using `TS_IND
 ```
 
 The indexed read filters by one `metadata.device_id` and a timestamp range covering the last `TS_READ_WINDOW_SECONDS` seconds, sorts by `timestamp` descending, projects only the metadata, timestamp, and temperature fields, and limits results to `TS_READ_LIMIT` documents. If custom `TS_META_FIELD` or `TS_TIME_FIELD` values are used, the generated index and query use those configured names.
+
+The `timeseries_index_read` task performs this query pattern for a random device selected on each task run. Its projection returns only the fields needed for the read result:
+
+```python
+_time_series.find(
+  {
+    "metadata.device_id": device_id,
+    "timestamp": {"$gte": start, "$lt": end},
+  },
+  {"_id": 0, "metadata": 1, "timestamp": 1, "temperature": 1},
+).sort("timestamp", -1).limit(100)
+```
+
+The default time window is the previous hour and the default result limit is 100 documents. The cursor is fully consumed with `list(cursor)`, so the recorded Locust response time includes query execution and result retrieval. This task has a 40% weight in the default workload.
 
 ### Short verification test
 

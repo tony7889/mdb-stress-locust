@@ -44,6 +44,7 @@ TS_GRANULARITY = os.getenv("TS_GRANULARITY", "seconds")
 TS_INDEX_NAME = os.getenv("TS_INDEX_NAME", "metadata_device_timestamp")
 TS_READ_WINDOW_SECONDS = int(os.getenv("TS_READ_WINDOW_SECONDS", "3600"))
 TS_READ_LIMIT = int(os.getenv("TS_READ_LIMIT", "100"))
+TS_INSERT_BATCH_SIZE = min(100, max(1, int(os.getenv("TS_INSERT_BATCH_SIZE", "100"))))
 PAYLOAD_BYTES = int(os.getenv("PAYLOAD_BYTES", "256"))
 DEVICE_COUNT = int(os.getenv("DEVICE_COUNT", "1000"))
 
@@ -225,19 +226,22 @@ class MongoDBStressUser(User):
     def time_series_insert(self) -> None:
         assert _time_series is not None
         started = _now_ms()
-        document = {
-            TS_META_FIELD: {
-                "device_id": f"device-{random.randrange(DEVICE_COUNT):06d}",
-                "site": random.choice(["hk", "ny", "london", "sydney"]),
-            },
-            TS_TIME_FIELD: datetime.now(timezone.utc),
-            "temperature": round(random.uniform(10.0, 40.0), 3),
-            "humidity": round(random.uniform(20.0, 95.0), 3),
-            "pressure": round(random.uniform(980.0, 1040.0), 3),
-        }
+        documents = [
+            {
+                TS_META_FIELD: {
+                    "device_id": f"device-{random.randrange(DEVICE_COUNT):06d}",
+                    "site": random.choice(["hk", "ny", "london", "sydney"]),
+                },
+                TS_TIME_FIELD: datetime.now(timezone.utc),
+                "temperature": round(random.uniform(10.0, 40.0), 3),
+                "humidity": round(random.uniform(20.0, 95.0), 3),
+                "pressure": round(random.uniform(980.0, 1040.0), 3),
+            }
+            for _ in range(TS_INSERT_BATCH_SIZE)
+        ]
         try:
-            result = _time_series.insert_one(document)
-            _record_request("timeseries_insert", started, 1 if result.acknowledged else 0)
+            result = _time_series.insert_many(documents, ordered=False)
+            _record_request("timeseries_insert", started, len(result.inserted_ids))
         except Exception as exc:  # noqa: BLE001
             _record_request("timeseries_insert", started, exception=exc)
 
