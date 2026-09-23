@@ -80,6 +80,63 @@ Each Locust user repeatedly selects one task according to the weights above. Eve
 
 CRUD update and delete use IDs retained locally by each user, so they do not add a lookup operation to the measured request. Time-series reads use the compound index on `metadata.device_id` and `timestamp` when the collection is configured with the default field names.
 
+### Sample documents
+
+CRUD inserts create documents with a unique UUID string as `_id`:
+
+```javascript
+{
+  "_id": "<uuid-hex>",
+  "tenant_id": 42,
+  "status": "queued",
+  "value": 637.42,
+  "updated_at": ISODate("2026-09-23T12:00:00Z"),
+  "payload": "<256 random ASCII characters>"
+}
+```
+
+CRUD updates change `status`, `value`, and `updated_at`, and increment `update_count`. Deletes remove the selected document by `_id`.
+
+Time-series inserts create measurements like this. The actual field names use `TS_META_FIELD` and `TS_TIME_FIELD`:
+
+```javascript
+{
+  "metadata": {
+    "device_id": "device-000042",
+    "site": "hk"
+  },
+  "timestamp": ISODate("2026-09-23T12:00:00Z"),
+  "temperature": 24.731,
+  "humidity": 61.204,
+  "pressure": 1012.876
+}
+```
+
+### User scheduling and parallelism
+
+- Each Locust user maintains its own task state and selects one task after each wait period; MongoDB client and collection objects are shared within the Locust process.
+- The wait period is random between 10 ms and 100 ms after a task completes.
+- Task weights are probabilities over time, not a fixed sequence. For example, a 100-user run will trend toward 15 CRUD inserts, 15 CRUD updates, 10 CRUD deletes, 30 time-series inserts, and 30 time-series reads per 100 task selections.
+- Users run concurrently under Locust. With `--users 100`, up to 100 users generate traffic in parallel, subject to MongoDB capacity and client/network limits.
+- A user executes one task at a time. The MongoDB operation is synchronous for that user, so the next task starts after the current operation and wait period finish.
+- Each user's CRUD ID list is private. A user can update or delete only documents inserted by that same user, and the list is limited by `MAX_LOCAL_CRUD_IDS`.
+- MongoDB client, collection creation, time-series setup, and index creation are initialized once per Locust process, with a setup lock to avoid duplicate initialization.
+
+### Indexes and query pattern
+
+The regular CRUD collection relies on MongoDB's default unique `_id` index. The test does not create additional CRUD indexes.
+
+For the native time-series collection, the test creates this index using `TS_INDEX_NAME`:
+
+```javascript
+{
+  "metadata.device_id": 1,
+  "timestamp": -1
+}
+```
+
+The indexed read filters by one `metadata.device_id` and a timestamp range covering the last `TS_READ_WINDOW_SECONDS` seconds, sorts by `timestamp` descending, projects only the metadata, timestamp, and temperature fields, and limits results to `TS_READ_LIMIT` documents. If custom `TS_META_FIELD` or `TS_TIME_FIELD` values are used, the generated index and query use those configured names.
+
 ### Short verification test
 
 Use this bounded run to verify the environment and database connection before starting a longer load test:
