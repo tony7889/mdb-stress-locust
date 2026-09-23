@@ -2,7 +2,7 @@
 
 This test exercises:
 
-- CRUD insert/update/delete against a regular collection.
+- CRUD insert/update/delete/read against a regular collection.
 - Inserts into a native MongoDB time-series collection.
 - Reads filtered by `metadata.device_id` and a timestamp range, sorted newest-first, using a compound index on metadata plus time.
 
@@ -88,7 +88,7 @@ locust -f locustfile.py
 
 Then open `http://localhost:8089` and set users, spawn rate, and duration.
 
-The default task distribution is 15% CRUD insert, 15% CRUD update, 10% CRUD delete, 30% time-series insert, and 30% indexed time-series read.
+The default task distribution is 10% CRUD insert, 5% CRUD update, 5% CRUD delete, 30% indexed CRUD read, 10% time-series insert, and 40% indexed time-series read.
 
 ## Stress test details
 
@@ -96,13 +96,14 @@ Each Locust user repeatedly selects one task according to the weights above. Eve
 
 | Operation | Weight | Workload measured |
 |---|---:|---|
-| `crud_insert` | 15% | Inserts a generated document into the regular CRUD collection. |
-| `crud_update` | 15% | Updates a document ID created by the same user. |
-| `crud_delete` | 10% | Deletes a document ID created by the same user. |
-| `timeseries_insert` | 30% | Inserts a generated measurement into the native time-series collection. |
-| `timeseries_index_read` | 30% | Reads measurements for one device over a time range, sorted newest-first. |
+| `crud_insert` | 10% | Inserts a generated document into the regular CRUD collection. |
+| `crud_update` | 5% | Updates a document ID created by the same user. |
+| `crud_delete` | 5% | Deletes a document ID created by the same user. |
+| `crud_read` | 30% | Reads a document by its `_id` using the default unique MongoDB index. |
+| `timeseries_insert` | 10% | Inserts a generated measurement into the native time-series collection. |
+| `timeseries_index_read` | 40% | Reads measurements for one device over a time range, sorted newest-first. |
 
-CRUD update and delete use IDs retained locally by each user, so they do not add a lookup operation to the measured request. Time-series reads use the compound index on `metadata.device_id` and `timestamp` when the collection is configured with the default field names.
+CRUD update, delete, and read use IDs retained locally by each user, so they do not add a lookup operation to the measured request. Time-series reads use the compound index on `metadata.device_id` and `timestamp` when the collection is configured with the default field names.
 
 ### Sample documents
 
@@ -119,7 +120,7 @@ CRUD inserts create documents with a unique UUID string as `_id`:
 }
 ```
 
-CRUD updates change `status`, `value`, and `updated_at`, and increment `update_count`. Deletes remove the selected document by `_id`.
+CRUD reads retrieve the selected document by `_id`. CRUD updates change `status`, `value`, and `updated_at`, and increment `update_count`. Deletes remove the selected document by `_id`.
 
 Time-series inserts create measurements like this. The actual field names use `TS_META_FIELD` and `TS_TIME_FIELD`:
 
@@ -140,7 +141,7 @@ Time-series inserts create measurements like this. The actual field names use `T
 
 - Each Locust user maintains its own task state and selects one task after each wait period; MongoDB client and collection objects are shared within the Locust process.
 - The wait period is random between 10 ms and 100 ms after a task completes.
-- Task weights are probabilities over time, not a fixed sequence. For example, a 100-user run will trend toward 15 CRUD inserts, 15 CRUD updates, 10 CRUD deletes, 30 time-series inserts, and 30 time-series reads per 100 task selections.
+- Task weights are probabilities over time, not a fixed sequence. For example, 100 task selections will trend toward 10 CRUD inserts, 5 CRUD updates, 5 CRUD deletes, 30 CRUD reads, 10 time-series inserts, and 40 time-series reads.
 - Users run concurrently under Locust. With `--users 100`, up to 100 users generate traffic in parallel, subject to MongoDB capacity and client/network limits.
 - A user executes one task at a time. The MongoDB operation is synchronous for that user, so the next task starts after the current operation and wait period finish.
 - Each user's CRUD ID list is private. A user can update or delete only documents inserted by that same user, and the list is limited by `MAX_LOCAL_CRUD_IDS`.
@@ -148,7 +149,7 @@ Time-series inserts create measurements like this. The actual field names use `T
 
 ### Indexes and query pattern
 
-The regular CRUD collection relies on MongoDB's default unique `_id` index. The test does not create additional CRUD indexes.
+The regular CRUD collection relies on MongoDB's default unique `_id` index for CRUD reads, updates, and deletes. The test does not create additional CRUD indexes.
 
 For the native time-series collection, the test creates this index using `TS_INDEX_NAME`:
 
@@ -173,15 +174,16 @@ Use this bounded run to verify the environment and database connection before st
   --run-time 30s
 ```
 
-The latest verification run completed with 342 requests, 0 failures, and 11.57 requests/sec:
+The latest verification run completed with 312 requests, 0 failures, and approximately 10.4 requests/sec:
 
 | Operation | Requests | Avg | Median | P95 | Max |
 |---|---:|---:|---:|---:|---:|
-| CRUD insert | 57 | 20 ms | 11 ms | 99 ms | 158 ms |
-| CRUD update | 58 | 29 ms | 12 ms | 140 ms | 306 ms |
-| CRUD delete | 35 | 31 ms | 11 ms | 140 ms | 174 ms |
-| Time-series insert | 83 | 40 ms | 14 ms | 140 ms | 402 ms |
-| Time-series indexed read | 109 | 20 ms | 10 ms | 89 ms | 156 ms |
+| CRUD insert | 40 | 31 ms | 13 ms | 150 ms | 148 ms |
+| CRUD update | 14 | 45 ms | 12 ms | 220 ms | 218 ms |
+| CRUD delete | 9 | 41 ms | 13 ms | 170 ms | 166 ms |
+| CRUD indexed read | 99 | 23 ms | 8 ms | 140 ms | 158 ms |
+| Time-series insert | 32 | 29 ms | 14 ms | 140 ms | 212 ms |
+| Time-series indexed read | 118 | 41 ms | 13 ms | 160 ms | 164 ms |
 
 This is a single-user smoke benchmark. Results vary with MongoDB deployment size, network latency, collection contents, payload size, and the selected user count and run time.
 
