@@ -66,6 +66,44 @@ Then open `http://localhost:8089` and set users, spawn rate, and duration.
 
 The default task distribution is 15% CRUD insert, 15% CRUD update, 10% CRUD delete, 30% time-series insert, and 30% indexed time-series read.
 
+## Stress test details
+
+Each Locust user repeatedly selects one task according to the weights above. Every MongoDB operation is reported as a separate Locust request named `mongodb`, with the operation name identifying the measured workload:
+
+| Operation | Weight | Workload measured |
+|---|---:|---|
+| `crud_insert` | 15% | Inserts a generated document into the regular CRUD collection. |
+| `crud_update` | 15% | Updates a document ID created by the same user. |
+| `crud_delete` | 10% | Deletes a document ID created by the same user. |
+| `timeseries_insert` | 30% | Inserts a generated measurement into the native time-series collection. |
+| `timeseries_index_read` | 30% | Reads measurements for one device over a time range, sorted newest-first. |
+
+CRUD update and delete use IDs retained locally by each user, so they do not add a lookup operation to the measured request. Time-series reads use the compound index on `metadata.device_id` and `timestamp` when the collection is configured with the default field names.
+
+### Short verification test
+
+Use this bounded run to verify the environment and database connection before starting a longer load test:
+
+```bash
+.venv/bin/locust -f locustfile.py \
+  --headless \
+  --users 1 \
+  --spawn-rate 1 \
+  --run-time 30s
+```
+
+The latest verification run completed with 342 requests, 0 failures, and 11.57 requests/sec:
+
+| Operation | Requests | Avg | Median | P95 | Max |
+|---|---:|---:|---:|---:|---:|
+| CRUD insert | 57 | 20 ms | 11 ms | 99 ms | 158 ms |
+| CRUD update | 58 | 29 ms | 12 ms | 140 ms | 306 ms |
+| CRUD delete | 35 | 31 ms | 11 ms | 140 ms | 174 ms |
+| Time-series insert | 83 | 40 ms | 14 ms | 140 ms | 402 ms |
+| Time-series indexed read | 109 | 20 ms | 10 ms | 89 ms | 156 ms |
+
+This is a single-user smoke benchmark. Results vary with MongoDB deployment size, network latency, collection contents, payload size, and the selected user count and run time.
+
 ## Notes
 
 - The test reports MongoDB operations as Locust request types named `mongodb`.
