@@ -1,12 +1,8 @@
 """MongoDB CRUD + native time-series stress test for Locust.
 
-Default task weights:
-    - CRUD insert:       10%
-    - CRUD update:        5%
-    - CRUD delete:        5%
-    - CRUD indexed read: 30%
-    - TS insert:          10%
-    - TS indexed read:    40%
+Scenarios:
+    - CRUDStressUser: CRUD insert/update/delete/read with weights 10/5/5/30.
+    - TimeSeriesStressUser: time-series insert/read with weights 10/40.
 
 Run with:
   locust -f locustfile.py --host mongodb://localhost:27017
@@ -146,13 +142,14 @@ def on_test_stop(environment, **kwargs: Any) -> None:
 
 
 class MongoDBStressUser(User):
-    """Locust user generating CRUD and indexed native time-series traffic."""
+    """Shared MongoDB setup and helpers for the CRUD and time-series scenarios."""
+
+    abstract = True
 
     wait_time = between(0.01, 0.10)
 
     # 50% CRUD, 50% time-series; indexed reads are the largest workload.
-    @task(10)
-    def crud_insert(self) -> None:
+    def _crud_insert(self) -> None:
         assert _crud is not None
         document_id = uuid.uuid4().hex
         document = {
@@ -171,8 +168,7 @@ class MongoDBStressUser(User):
         except Exception as exc:  # noqa: BLE001 - report database errors to Locust
             _record_request("crud_insert", started, exception=exc)
 
-    @task(5)
-    def crud_update(self) -> None:
+    def _crud_update(self) -> None:
         assert _crud is not None
         document_id = self._choose_id()
         if document_id is None:
@@ -194,8 +190,7 @@ class MongoDBStressUser(User):
         except Exception as exc:  # noqa: BLE001
             _record_request("crud_update", started, exception=exc)
 
-    @task(5)
-    def crud_delete(self) -> None:
+    def _crud_delete(self) -> None:
         assert _crud is not None
         document_id = self._choose_id()
         if document_id is None:
@@ -209,8 +204,7 @@ class MongoDBStressUser(User):
         except Exception as exc:  # noqa: BLE001
             _record_request("crud_delete", started, exception=exc)
 
-    @task(30)
-    def crud_read(self) -> None:
+    def _crud_read(self) -> None:
         assert _crud is not None
         document_id = self._choose_id()
         if document_id is None:
@@ -222,8 +216,7 @@ class MongoDBStressUser(User):
         except Exception as exc:  # noqa: BLE001
             _record_request("crud_read", started, exception=exc)
 
-    @task(10)
-    def time_series_insert(self) -> None:
+    def _time_series_insert(self) -> None:
         assert _time_series is not None
         started = _now_ms()
         documents = [
@@ -245,8 +238,7 @@ class MongoDBStressUser(User):
         except Exception as exc:  # noqa: BLE001
             _record_request("timeseries_insert", started, exception=exc)
 
-    @task(40)
-    def time_series_index_read(self) -> None:
+    def _time_series_index_read(self) -> None:
         assert _time_series is not None
         device_id = f"device-{random.randrange(DEVICE_COUNT):06d}"
         end = datetime.now(timezone.utc)
@@ -287,3 +279,35 @@ class MongoDBStressUser(User):
             self._ids.remove(document_id)
         except ValueError:
             pass
+
+
+class CRUDStressUser(MongoDBStressUser):
+    """CRUD-only Locust scenario."""
+
+    @task(10)
+    def crud_insert(self) -> None:
+        self._crud_insert()
+
+    @task(5)
+    def crud_update(self) -> None:
+        self._crud_update()
+
+    @task(5)
+    def crud_delete(self) -> None:
+        self._crud_delete()
+
+    @task(30)
+    def crud_read(self) -> None:
+        self._crud_read()
+
+
+class TimeSeriesStressUser(MongoDBStressUser):
+    """Native time-series-only Locust scenario."""
+
+    @task(10)
+    def time_series_insert(self) -> None:
+        self._time_series_insert()
+
+    @task(40)
+    def time_series_index_read(self) -> None:
+        self._time_series_index_read()
