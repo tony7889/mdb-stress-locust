@@ -213,6 +213,35 @@ The latest verification run completed with 312 requests, 0 failures, and approxi
 
 This is a single-user smoke benchmark. Results vary with MongoDB deployment size, network latency, collection contents, payload size, and the selected user count and run time.
 
+## Hardware requirements
+
+There is no single fixed hardware requirement. Size the load generator and MongoDB independently, then verify that neither one becomes the bottleneck.
+
+### Load generator
+
+For a small test of up to approximately 100 concurrent users, use at least:
+
+| Resource | Baseline |
+|---|---:|
+| CPU | 2 modern vCPUs/cores |
+| Memory | 4 GB RAM |
+| Storage | 5 GB free space for Python, logs, and CSV reports |
+| Network | 1 Gbps connection with low latency to MongoDB |
+
+For larger tests, add load-generator CPU and memory as user count and operation rate increase. Run Locust in headless mode and use multiple distributed workers when one generator cannot sustain the required concurrency or requests per second. The load generator should not run on the MongoDB server during capacity testing because that can distort the results.
+
+### MongoDB server
+
+For development or smoke testing, MongoDB can run locally with at least 2 CPU cores, 4 GB RAM, and 10 GB of free storage. For a production-like stress test, use hardware sized for the expected working set and write volume:
+
+- SSD or NVMe storage is recommended because the workload continuously writes CRUD and time-series data.
+- Provide enough RAM for frequently accessed indexes and the active working set; 8 GB or more is a practical starting point for a larger test.
+- Use at least 2–4 CPU cores for a moderate test and add cores as concurrent users and batch inserts increase.
+- Use a low-latency network path between the load generator and MongoDB. TLS and LDAP authentication add connection and authentication overhead, so measure them in the same environment as the target deployment.
+- Monitor CPU, memory, disk I/O, disk space, connections, operation latency, and replication lag when testing a replica set or sharded deployment.
+
+The `TS_INSERT_BATCH_SIZE` setting controls the number of time-series documents attempted by each insert call, up to 100. Increasing concurrent users increases both the number of simultaneous MongoDB operations and the rate at which batches are submitted. Hardware recommendations should be adjusted using observed resource utilization and latency, not user count alone.
+
 ## Notes
 
 - The test reports MongoDB operations as Locust request types named `mongodb`.
