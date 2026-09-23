@@ -81,6 +81,30 @@ locust -f locustfile.py \
   --csv mongodb-stress
 ```
 
+Run only the CRUD scenario by appending the user class name:
+
+```bash
+.venv/bin/locust -f locustfile.py \
+  --headless \
+  --users 100 \
+  --spawn-rate 10 \
+  --run-time 10m \
+  CRUDStressUser
+```
+
+Run only the time-series scenario:
+
+```bash
+.venv/bin/locust -f locustfile.py \
+  --headless \
+  --users 100 \
+  --spawn-rate 10 \
+  --run-time 10m \
+  TimeSeriesStressUser
+```
+
+To run both scenarios together, omit the class name. Locust will distribute the total users across the available concrete user classes.
+
 Web UI example:
 
 ```bash
@@ -89,11 +113,11 @@ locust -f locustfile.py
 
 Then open `http://localhost:8089` and set users, spawn rate, and duration.
 
-The default task distribution is 10% CRUD insert, 5% CRUD update, 5% CRUD delete, 30% indexed CRUD read, 10% time-series insert, and 40% indexed time-series read.
+The CRUD scenario task distribution is 10% CRUD insert, 5% CRUD update, 5% CRUD delete, and 30% indexed CRUD read. The time-series scenario distribution is 10% time-series insert and 40% indexed time-series read. These weights are independent within each scenario.
 
 ## Stress test details
 
-Each Locust user repeatedly selects one task according to the weights above. Every MongoDB operation is reported as a separate Locust request named `mongodb`, with the operation name identifying the measured workload:
+Each Locust user repeatedly selects one task according to the weights for its scenario. Every MongoDB operation is reported as a separate Locust request named `mongodb`, with the operation name identifying the measured workload:
 
 | Operation | Weight | Workload measured |
 |---|---:|---|

@@ -4,8 +4,9 @@ Scenarios:
     - CRUDStressUser: CRUD insert/update/delete/read with weights 10/5/5/30.
     - TimeSeriesStressUser: time-series insert/read with weights 10/40.
 
-Run with:
-  locust -f locustfile.py --host mongodb://localhost:27017
+Run with either scenario:
+    locust -f locustfile.py CRUDStressUser --host mongodb://localhost:27017
+    locust -f locustfile.py TimeSeriesStressUser --host mongodb://localhost:27017
 
 The --host value is optional; MONGODB_URI takes precedence when set.
 """
