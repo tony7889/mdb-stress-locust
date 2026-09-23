@@ -1,0 +1,23 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Locust reports and logs
+*_stats.csv
+*_failures.csv
+*_exceptions.csv
+*_stats_history.csv
+locust-report.html
+*.log

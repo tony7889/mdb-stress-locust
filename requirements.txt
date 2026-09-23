@@ -1,0 +1,8 @@
+# Locust load-test runner and web UI
+locust>=2.31,<3
+
+# MongoDB driver; the srv extra enables mongodb+srv:// URI support
+pymongo[srv]>=4.10,<5
+
+# Load local environment configuration for the benchmark
+python-dotenv>=1.0,<2
